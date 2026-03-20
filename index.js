@@ -48,12 +48,24 @@ io.on('connection', (socket) => {
 
             // Forward to n8n
             if (N8N_WEBHOOK_URL) {
-                await axios.post(N8N_WEBHOOK_URL, {
+                const response = await axios.post(N8N_WEBHOOK_URL, {
                     sessionId,
                     message,
                     userId
                 });
-                console.log(`[n8n] Forwarded message to n8n for session: ${sessionId}`);
+                
+                console.log(`[n8n] Forwarded message and received response for session: ${sessionId}`);
+
+                // If n8n returns the response directly (synchronous mode)
+                // This is ideal when the backend is local and n8n is in the cloud
+                if (response.data && response.data.replyText) {
+                    socket.emit('receiveMessage', {
+                        sessionId: response.data.sessionId || sessionId,
+                        replyText: response.data.replyText,
+                        intent: response.data.intent
+                    });
+                    console.log(`[Socket] Sent synchronous reply to client for session: ${sessionId}`);
+                }
             } else {
                 console.warn('[n8n] N8N_WEBHOOK_URL is not defined. Message not forwarded.');
                 socket.emit('error', { message: 'Backend configuration error: n8n webhook missing.' });
@@ -61,7 +73,7 @@ io.on('connection', (socket) => {
 
         } catch (error) {
             console.error(`[Error] Failed to process sendMessage:`, error.message);
-            socket.emit('error', { message: 'Failed to process message.' });
+            socket.emit('error', { message: `Backend error: ${error.message}` });
         }
     });
 
